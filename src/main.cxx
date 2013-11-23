@@ -25,6 +25,7 @@
 
 using namespace std;
 map<string, int> concepts;
+map<string, int> significantObjectIdx;
 vector<string> actions;
 aig_tk::PDDL_Object_Ptr_Vec allObjects;
 vector<aig_tk::Fluent_Vec> stateFluents;
@@ -198,9 +199,23 @@ int main(int argc, char** argv) {
 	int instance_num(atoi(argv[2]));
 	cout << folder << " " << instance_num << endl;
 	string instance("instance");
-	ofstream fout, dout;
+	ofstream fout, dout, nappout;
+
+	ifstream fin("aux_domain.txt");
+	string line;
+	while (!fin.eof() && getline(fin, line)) {
+				istringstream iss(line);
+
+				string tmp;
+				int action_num = -1;
+				getline(fin, tmp);
+				std::istringstream(tmp) >> action_num;
+				significantObjectIdx[line] = action_num;
+	}
+
 	dout.open("domain.txt");
 	fout.open("plans.txt", ios::app);
+	nappout.open("non_applicable.txt", ios::app);
 	string instance_path;
 	folder = "./problems/" + folder + "/";
 	string domain = folder + "domain.pddl";
@@ -225,14 +240,77 @@ int main(int argc, char** argv) {
 	fout << instance_num << "\t" << plan->size() << endl;
 	get_state(*strips_prob, 0, fout);
 
+
+	aig_tk::Node* n = aig_tk::Node::root(*strips_prob);
 	for (unsigned i = 0; i < plan->size(); i++) {
 		exampleNum++;
-		aig_tk::Index_Vec objs_idx = (*plan)[i]->op()->pddl_objs_idx();
+
 		fout << (*plan)[i]->op()->name();
+		nappout<<exampleNum-1<<endl;
+
+		map<string,vector<int> > applicableActions;
+		for(unsigned j = 0; j < strips_prob->num_actions(); j++) {
+			 aig_tk::Action* a = strips_prob->actions()[j];
+			 if( a->can_be_applied_on(*(n->s())) ) {
+				 aig_tk::Index_Vec objs_idx = a->pddl_objs_idx();
+				 string aname = a->name();
+				 int sigObjIdx = significantObjectIdx[aname];
+				 if(sigObjIdx == -1 &&  applicableActions[aname].size() == 0){
+					 applicableActions[aname].push_back(-1);
+					 continue;
+				 }
+				 if(find(applicableActions[aname].begin(),applicableActions[aname].end(),objs_idx[sigObjIdx] )
+						 ==applicableActions[aname].end()){
+					 applicableActions[aname].push_back(objs_idx[sigObjIdx]);
+				 }
+			 }
+		}
+		map<string,vector<int> > printedActions;
+
+	    for(unsigned j = 0; j < strips_prob->num_actions(); j++) {
+	    	    aig_tk::Action* a = strips_prob->actions()[j];
+
+	            if((*plan)[i]->op()->name().compare(a->name())==0){
+	            	if( !a->can_be_applied_on(*(n->s())) ) {
+	            		aig_tk::Index_Vec objs_idx = a->pddl_objs_idx();
+	            		string aname = a->name();
+	            		if(aname.compare("")==0) continue;
+	            		int sigObjIdx = significantObjectIdx[aname];
+	            		int sigObj = -1;
+	            		if(sigObjIdx != -1 ) sigObj = objs_idx[sigObjIdx];
+
+	            		 if(find(applicableActions[aname].begin(),applicableActions[aname].end(),sigObj)
+	            			            								 !=applicableActions[aname].end()){
+	            			 continue;
+	            		 }
+	            		 if(find(printedActions[aname].begin(),printedActions[aname].end(),sigObj )
+	            		 	            			            			!=printedActions[aname].end()){
+	            		 	            			 continue;
+	            		 }
+
+	            		 nappout<<aname;
+	            		 if(sigObj != -1){
+	            			 int sigObjIdx = significantObjectIdx[aname];
+	            			 nappout << " " << allObjects[sigObj]->signature();
+	            			 printedActions[aname].push_back(sigObj);
+	            		 }else{
+	            			 if(sigObj == -1 &&  printedActions[aname].size() == 0){
+	            				 printedActions[aname].push_back(-1);
+	            			 }
+	            		 }
+	            		 nappout << endl;
+	            	 }
+	            }
+	    }
+	    nappout<<endl;
+
+	    aig_tk::Index_Vec objs_idx = (*plan)[i]->op()->pddl_objs_idx();
 		for (unsigned j = 0; j < objs_idx.size(); ++j)
 			fout << " " << allObjects[objs_idx[j]]->signature();
 		fout << endl;
 		get_state(*strips_prob, i + 1, fout);
+
+		n = n->successor((*plan)[i]->op());
 	}
 
 	std::cout << std::endl;
@@ -242,7 +320,9 @@ int main(int argc, char** argv) {
 	delete plan;
 
 	cout << "Examples: " << exampleNum << endl;
+	fout.flush();
 	fout.close();
+	dout.flush();
 	dout.close();
 	return 0;
 }

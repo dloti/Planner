@@ -37,6 +37,20 @@ void get_plan(aig_tk::STRIPS_Problem& strips_prob, vector<aig_tk::Node*>& plan) 
 
 	aig_tk::Node* n0 = aig_tk::Node::root(strips_prob);
 	/**
+		 * Create a propagator that uses h_max
+		 */
+		aig_tk::Propagator< aig_tk::Max_Heuristic > rel_plan( strips_prob );
+
+		/**
+		 * builds relax plan
+		 */
+		rel_plan.build_propagation_graph( n0 );
+	aig_tk::Relaxed_Plan_Extractor< aig_tk::Max_Heuristic > h_ff;
+
+	h_ff.initialize( strips_prob );
+
+	unsigned  cost_rel_plan = h_ff.eval( strips_prob.init(), strips_prob.goal() );
+	/**
 	 * SEARCH
 	 **/
 
@@ -49,10 +63,10 @@ void get_plan(aig_tk::STRIPS_Problem& strips_prob, vector<aig_tk::Node*>& plan) 
 
 	//t0 = time_used();
 
-	//	if (engine.solve(n0, plan)) {
+		if (engine.solve(n0, plan)) {
 	//		tf = time_used();
-	//		//output_plan(plan, t0, tf);
-	//	}
+			//output_plan(plan, t0, tf);
+		}
 
 	plan.clear();
 	n0 = aig_tk::Node::root(strips_prob);
@@ -61,6 +75,9 @@ void get_plan(aig_tk::STRIPS_Problem& strips_prob, vector<aig_tk::Node*>& plan) 
 	if (engine.solve(n0, plan)) {
 		//tf = time_used();
 		//output_plan(plan, t0, tf);
+
+
+
 		for (unsigned i = 0; i < plan.size(); i++)
 			stateFluents.push_back(plan[i]->s()->fluent_vec());
 	} else
@@ -217,10 +234,11 @@ int main(int argc, char** argv) {
 	cout << "Compiled" << endl;
 
 	plan = new vector<aig_tk::Node*>();
-	get_plan(*strips_prob, *plan);
 	get_primitive_concepts(*strips_prob, dout);
 	get_instance_objects(*strips_prob, dout);
 	get_actions(*strips_prob, dout);
+	get_plan(*strips_prob, *plan);
+
 
 	fout << instance_num << "\t" << plan->size() << endl;
 	get_state(*strips_prob, 0, fout);

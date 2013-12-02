@@ -20,4 +20,4 @@ for i in range(1,instances_num+1):
 		break
 		
 print "Training set valid"
-shutil.copy2('plans.txt', '../Student/non_applicable.txt')
+shutil.copy2('non_applicable.txt', '../Student/non_applicable.txt')
